@@ -1,82 +1,34 @@
-public class aLiTest {
-    private static final String updateAccesssTokenURL = "https://auth.aliyundrive.com/v2/account/token";
-    private static final String signinURL = "https://member.aliyundrive.com/v2/activity/sign_in_list?_rx-s=mobile";
-    private static final String rewardURL = "https://member.aliyundrive.com/v1/activity/sign_in_reward?_rx-s=mobile";
-    private static final RestTemplate re = new RestTemplate();
-    public static final HttpHeaders headers = new HttpHeaders();
-    private static final String refresh_token = "";
-    private static final StringBuffer sb = new StringBuffer();
+name: Java CI
+on:
+  schedule:
+    - cron: "30 22 * * *"  # 北京时间上午06:30
+  workflow_dispatch:   # 添加 workflow_dispatch 触发器，用于手动运行
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-    public static void main(String[] args) {
-        headers.add("Content-Type", "application/json");
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-        JSONObject updateAccesssDate = new JSONObject();
-        updateAccesssDate.put("grant_type", "refresh_token");
-        updateAccesssDate.put("refresh_token", refresh_token);
+    - name: Set up JDK
+      uses: actions/setup-java@v1
+      with:
+        java-version: '11' # 这里可以指定你需要的 Java 版本
 
-        HttpEntity<String> updateAccesssDateEntity = new HttpEntity<String>(JSONObject.toJSONString(updateAccesssDate), headers);
-        ResponseEntity<String> updateAccesssDateRep = null;
-        try {
-            updateAccesssDateRep = re.postForEntity(updateAccesssTokenURL, updateAccesssDateEntity, String.class);
-        } catch (RestClientException e) {
-            sb.append("提示 : TOKEN 失效，请更新 ！");
-            System.out.println(sb);
-            return;
-        }
-        JSONObject UpdateAccesssTokenRep = JSONObject.parseObject(updateAccesssDateRep.getBody());
-        sb.append("------------------获取个人信息成功--------------------" + "\n");
-        sb.append("用户名 ：" + UpdateAccesssTokenRep.getString("user_name") + "\n");
+    - name: Cache Maven packages
+      uses: actions/cache@v2
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
 
-        headers.add("Authorization", UpdateAccesssTokenRep.getString("access_token"));
-        JSONObject signinURLDate = new JSONObject();
-        signinURLDate.put("isReward", false);
-        HttpEntity<String> signinURLDateEntity = new HttpEntity<String>(JSONObject.toJSONString(signinURLDate), headers);
-        ResponseEntity<String> signinURLDateRep = null;
-        JSONObject signinURListRep = null;
+    - name: Build with Maven
+      run: mvn -B package --file pom.xml   # 使用 Maven 进行项目构建，可以根据你的项目需要修改命令
 
-        try {
-            signinURLDateRep = re.postForEntity(signinURL, signinURLDateEntity, String.class);
-            signinURListRep = JSONObject.parseObject(signinURLDateRep.getBody());
-        } catch (RestClientException e) {
-            sb.append("提示 : 签到列表获取失败 ！");
-            System.out.println(sb);
-            return;
-        }
-        String signInCount = signinURListRep.getJSONObject("result").getString("signInCount");
-        JSONArray signInLogs = signinURListRep.getJSONObject("result").getJSONArray("signInInfos");
-        sb.append("------------------获取签到列表信息成功------------------" + "\n");
-        sb.append("本月累计签到 ：" + signInCount + "\n");
-        JSONObject signDayInLogs = signInLogs.getJSONObject(Integer.valueOf(signInCount) - 1);
-        for (int i = 0; i < signInLogs.size(); i++) {
-
-            if (signInLogs.getJSONObject(i).getString("status").equals("normal") ) {
-                final String day = signInLogs.getJSONObject(i).getString("day");
-                JSONObject rewardDate = new JSONObject();
-                rewardDate.put("signInDay", day);
-                HttpEntity<String> rewardDateEntity = new HttpEntity<String>(rewardDate.toJSONString(), headers);
-                ResponseEntity<String> rewardDateRep = null;
-                JSONObject rewardListDateRep = null;
-                try {
-                    rewardDateRep = re.postForEntity(rewardURL, rewardDateEntity, String.class);
-                    rewardListDateRep = JSONObject.parseObject(rewardDateRep.getBody());
-                    if (rewardListDateRep.getString("success").equals("true")) {
-                        sb.append("------------------奖励领取成功--------------------" + "\n");
-                        sb.append("奖品名称 ：" + rewardListDateRep.getJSONObject("result").getString("name") + "\n");
-                        sb.append("奖品名称 ：" + rewardListDateRep.getJSONObject("result").getString("description") + "\n");
-                        sb.append("奖品名称 ：" + rewardListDateRep.getJSONObject("result").getString("notice") + "\n");
-                        System.out.println(sb);
-                        return;
-                    }
-                } catch (RestClientException e) {
-                    sb.append("提示 : 奖励领取失败 ！");
-                    System.out.println(sb);
-                    return;
-                }
-            }
-        }
-        sb.append("------------------当天已领取奖励-------------------" + "\n");
-        sb.append("奖品名称 ：" + signDayInLogs.getJSONObject("reward").getString("name") + "\n");
-        sb.append("奖品名称 ：" + signDayInLogs.getJSONObject("reward").getString("description") + "\n");
-        System.out.println(sb);
-    }
-}
+    - name: run Java Application
+      run: |
+        java -Djava.security.manager -Djava.security.policy==src/main/resources/policy.policy -jar  target/ToDoTask.jar
+      # 附带权限加载运行程序
+      env:
+        REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
